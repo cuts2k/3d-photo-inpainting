@@ -1,6 +1,3 @@
-from operator import mod
-import queue
-from xmlrpc.client import MAXINT
 import cynetworkx as netx
 import numpy as np
 import pickle 
@@ -14,11 +11,12 @@ f.close()
 canvas_size = 256
 block_size = 16
 
-canvas = np.zeros((canvas_size, canvas_size, 3), dtype=np.uint8)
+canvas = np.zeros((canvas_size, canvas_size, 4), dtype=np.uint8)
 depth = np.zeros((canvas_size, canvas_size), dtype=np.float32)
 
 def out_of_bounds(x, y, cx, cy):
-    return (abs(x - cx) >= canvas_size // 2) or (abs(y - cy) >= canvas_size // 2) 
+    return (abs(x - cx) >= canvas_size // 2) or (abs(y - cy) >= canvas_size // 2)     
+
 ccs = netx.connected_components(g)
 
 i = 0
@@ -48,6 +46,20 @@ while not next_q.empty():
             continue
 
         visited.add(n)
+        nx = nx - cx + (canvas_size // 2)
+        ny = ny - cy + (canvas_size // 2)
+        if nx > max_x:
+            max_x = nx
+        if nx < min_x:
+            min_x = nx
+        if ny > max_y:
+            max_y = ny
+        if ny < min_y:
+            min_y = ny
+        canvas[nx][ny] = np.append(g.nodes[n]['color'][::-1], 255)
+        depth[nx][ny] = nd            
+        modified = True
+
         for neighbour in g[n]:
             if neighbour not in visited:    
                 nx2, ny2, _ = neighbour
@@ -55,19 +67,16 @@ while not next_q.empty():
                     next_q.put(neighbour)
                 else:
                     q.put(neighbour)
-        nx = nx - cx + (canvas_size // 2)
-        ny = ny - cy + (canvas_size // 2)
-        if nx > max_x:
-            max_x = nx
-        elif nx < min_x:
-            min_x = nx
-        if ny > max_y:
-            max_y = ny
-        elif ny < min_y:
-            min_y = ny
-        canvas[nx][ny] = g.nodes[n]['color'][::-1]
-        depth[nx][ny] = nd
-        modified = True
+
+        if 'far' in g.nodes[n] and g.nodes[n]['far'] is not None:
+            canvas[nx][ny][3] = 128
+            for neighbour in g.nodes[n]['far']:
+                next_q.put(neighbour)
+
+        if 'near' in g.nodes[n] and g.nodes[n]['near'] is not None:
+            for neighbour in g.nodes[n]['near']:
+                next_q.put(neighbour)
+
         
     if modified:
         min_x -= min_x % block_size
