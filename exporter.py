@@ -15,9 +15,7 @@ canvas = np.zeros((canvas_size, canvas_size, 4), dtype=np.uint8)
 depth = np.zeros((canvas_size, canvas_size), dtype=np.float32)
 
 def out_of_bounds(x, y, cx, cy):
-    return (abs(x - cx) >= canvas_size // 2) or (abs(y - cy) >= canvas_size // 2)     
-
-ccs = netx.connected_components(g)
+    return (abs(x - cx) >= canvas_size // 2) or (abs(y - cy) >= canvas_size // 2)
 
 i = 0
 q = Queue()
@@ -34,6 +32,7 @@ while not next_q.empty():
     max_x = max_y = -1
     n = next_q.get()
     cx, cy, _ = n
+    cc = g.nodes[n]['cc_id']
     q.put(n)
     while not q.empty():
         n = q.get()
@@ -42,6 +41,10 @@ while not next_q.empty():
 
         nx, ny, nd = n
         if out_of_bounds(nx, ny, cx, cy):
+            next_q.put(n)
+            continue
+
+        if cc != g.nodes[n]['cc_id']:
             next_q.put(n)
             continue
 
@@ -81,8 +84,8 @@ while not next_q.empty():
     if modified:
         min_x -= min_x % block_size
         min_y -= min_y % block_size
-        max_x += block_size - (max_x % block_size)
-        max_y += block_size - (max_x % block_size)
+        max_x += 0 if max_x % block_size is 0 else block_size - (max_x % block_size)
+        max_y += 0 if max_y % block_size is 0 else block_size - (max_y % block_size)
         img = canvas[min_x : max_x, min_y : max_y]
         cv2.imwrite(f"test/{i}.png", img)
         i+=1
