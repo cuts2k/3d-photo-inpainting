@@ -5,11 +5,13 @@ import pickle
 import cv2
 from queue import Queue
 
+atlas_size = 1024
 canvas_size = 256
 block_size = 16
+gap_thickness = 2
 
 def out_of_bounds(x, y, cx, cy):
-    return (abs(x - cx) >= canvas_size // 2) or (abs(y - cy) >= canvas_size // 2)
+    return (abs(x - cx) >= (canvas_size // 2) - gap_thickness) or (abs(y - cy) >= (canvas_size // 2) - gap_thickness)
 
 
 def generate_mesh(depth, real_min_x, real_min_y, verts_x, verts_y):
@@ -78,8 +80,8 @@ def generate_mesh(depth, real_min_x, real_min_y, verts_x, verts_y):
     for i in range(verts_x - 1):
         for j in range(verts_y - 1):
             if verts2[i][j][2] >= 0 and verts2[i+1][j][2] >= 0 and verts2[i][j+1][2] >= 0 and verts2[i+1][j+1][2] >= 0:
-                idx.append((i + j * verts_x + 1, (i + 1) + j * verts_x + 1, i + (j + 1) * verts_x + 1))
-                idx.append(((i + 1) + j * verts_x + 1, (i + 1) + (j + 1) * verts_x + 1, i + (j + 1) * verts_x + 1))
+                idx.append([i + j * verts_x + 1, (i + 1) + j * verts_x + 1, i + (j + 1) * verts_x + 1])
+                idx.append([(i + 1) + j * verts_x + 1, (i + 1) + (j + 1) * verts_x + 1, i + (j + 1) * verts_x + 1])
     return verts, idx
     
 
@@ -169,13 +171,13 @@ def get_glyphs(g):
             glyph = {"id": i,
                     'width': blocks_x,
                     'height': blocks_y,
-                    'tex': img,
+                    'tex': np.copy(img),
                     'verts': verts,
                     'idx': idx}
             glyphs.append(glyph)
-            cv2.imwrite(f"test/{i}.png", img)
-            depth *= 64 
-            cv2.imwrite(f"test/{i}_d.png", depth)
+            #cv2.imwrite(f"test/{i}.png", img)
+            #depth *= 64 
+            #cv2.imwrite(f"test/{i}_d.png", depth)
             i+=1
             canvas[::] = 0
             depth_canvas[::] = -1
@@ -184,9 +186,46 @@ def get_glyphs(g):
     return glyphs
 
 
+def check_mask(m, i, j, width, height):
+    clash = m[i][j] or m[i+width][j] or m[i][j+height] or m[i+width][j+height]
+    return not clash
+
+
+def place_glyph(glyph, atlas, mask, mask_size, verts, idx):
+    w = glyph['width']
+    h = glyph['height']
+    for i in range(mask_size - w):
+        for j in range(mask_size - h):
+            if check_mask(mask, i, j, w, h):
+                atlas[i * block_size : (i + w) * block_size, j * block_size : (j + h) * block_size, :] = glyph['tex']
+                mask[i : i + w, j : j + h] = True
+                for id in glyph['idx']:
+                    id[0] += len(verts)
+                    id[1] += len(verts)
+                    id[2] += len(verts)
+                    idx.append(id)
+                for vert in glyph['verts']:
+                    vert[3] = vert[3] * (w / mask_size) + (i / mask_size)
+                    vert[4] = vert[4] * (h / mask_size) + (j / mask_size)
+                    verts.append(vert)
+                return
+    raise "Not enough space in the atlas"
+
+
+def create_atlas(g):
+    glyphs = get_glyphs(g)
+    mask_size = atlas_size // block_size
+    atlas = np.zeros((atlas_size, atlas_size, 4), dtype=np.uint8)
+    mask = np.zeros((mask_size, mask_size), dtype=np.bool8)
+    verts = []
+    idx = []
+    for glyph in glyphs:
+        place_glyph(glyph, atlas, mask, mask_size, verts, idx)
+    return atlas, verts, idx
+
 
 f = open('mesh_small.gz', 'rb')
 g = pickle.load(f)
 f.close()
-
-print(get_glyphs(g))
+atlas, verts, idx = create_atlas(g)
+cv2.imwrite(f"test/atlas.png", atlas)
