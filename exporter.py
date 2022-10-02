@@ -80,8 +80,8 @@ def generate_mesh(depth, real_min_x, real_min_y, verts_x, verts_y):
     for j in range(verts_y - 1):  
         for i in range(verts_x - 1):
             if verts2[j][i][2] >= 0 and verts2[j][i+1][2] >= 0 and verts2[j+1][i][2] >= 0 and verts2[j+1][i+1][2] >= 0:
-                idx.append([i + j * verts_x, (i + 1) + j * verts_x, i + (j + 1) * verts_x])
-                idx.append([(i + 1) + j * verts_x, (i + 1) + (j + 1) * verts_x, i + (j + 1) * verts_x])
+                idx.append([i + j * verts_x, i + (j + 1) * verts_x, (i + 1) + j * verts_x])
+                idx.append([(i + 1) + j * verts_x, i + (j + 1) * verts_x, (i + 1) + (j + 1) * verts_x])
     return verts, idx
     
 
@@ -175,8 +175,8 @@ def get_glyphs(g):
                     'verts': verts,
                     'idx': idx}
             glyphs.append(glyph)
-            print(i, blocks_x, blocks_y)
-            cv2.imwrite(f"test/{i}.png", img)
+            #print(i, blocks_x, blocks_y)
+            #cv2.imwrite(f"test/{i}.png", img)
             #depth *= 64 
             #cv2.imwrite(f"test/{i}_d.png", depth)
             i+=1
@@ -187,17 +187,12 @@ def get_glyphs(g):
     return glyphs
 
 
-def check_mask(m, i, j, width, height):
-    clash = m[j][i] or m[j][i+width] or m[j+height][i] or m[j+height][i+width]
-    return not clash
-
-
 def place_glyph(glyph, atlas, mask, mask_size, verts, idx):
     w = glyph['width']
     h = glyph['height']
     for j in range(mask_size - h):
         for i in range(mask_size - w):
-            if check_mask(mask, i, j, w, h):
+            if not (True in mask[j : j + h, i : i + w]):
                 atlas[j * block_size : (j + h) * block_size, i * block_size : (i + w) * block_size, :] = glyph['tex']
                 mask[j : j + h, i : i + w] = True
                 for id in glyph['idx']:
