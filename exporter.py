@@ -5,8 +5,8 @@ import pickle
 import cv2
 from queue import Queue
 
-atlas_size = 2048
-canvas_size = 512
+atlas_size = 4096
+canvas_size = 1024
 block_size = 16
 gap_thickness = 2
 
@@ -208,7 +208,7 @@ def place_glyph(glyph, atlas, mask, mask_size, verts, idx):
                     idx.append(id)
                 for vert in glyph['verts']:
                     vert[3] = vert[3] * (w / mask_size) + (i / mask_size)
-                    vert[4] = vert[4] * (h / mask_size) + (j / mask_size)
+                    vert[4] = 1.0 - (vert[4] * (h / mask_size) + (j / mask_size))
                     verts.append(vert)
                 return
     raise "Not enough space in the atlas"
@@ -242,7 +242,7 @@ def export_obj(g, filename='test'):
     f.close()
 
 
-f = open('mesh_small.gz', 'rb')
+f = open('mesh.gz', 'rb')
 g = pickle.load(f)
 f.close()
 export_obj(g)
