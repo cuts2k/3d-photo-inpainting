@@ -5,8 +5,8 @@ import pickle
 import cv2
 from queue import Queue
 
-atlas_size = 1024
-canvas_size = 256
+atlas_size = 2048
+canvas_size = 512
 block_size = 16
 gap_thickness = 2
 
@@ -17,71 +17,71 @@ def out_of_bounds(x, y, cx, cy):
 def generate_mesh(depth, real_min_x, real_min_y, verts_x, verts_y):
     verts = []
     idx = []
-    verts1 = np.zeros((verts_x, verts_y, 5), dtype=np.float32)
-    verts2 = np.zeros((verts_x, verts_y, 5), dtype=np.float32)
-    for i in range(verts_x):
-        for j in range(verts_y):
+    verts1 = np.zeros((verts_y, verts_x, 5), dtype=np.float32)
+    verts2 = np.zeros((verts_y, verts_x, 5), dtype=np.float32)
+    for j in range(verts_y):
+        for i in range(verts_x):
             offset_x = i * block_size if i < verts_x - 1 else i * block_size - 1
             offset_y = j * block_size if j < verts_y - 1 else j * block_size - 1
-            verts1[i][j] = (real_min_x + offset_x, 
+            verts1[j][i] = (real_min_x + offset_x, 
                             real_min_y + offset_y, 
-                            depth[offset_x][offset_y],
+                            depth[offset_y][offset_x],
                             i / (verts_x - 1),
                             j / (verts_y - 1))
 
-    for i in range(verts_x):
-        for j in range(verts_y):
-            verts2[i][j] = verts1[i][j]
-            if verts1[i][j][2] < 0:
+    for j in range(verts_y):
+        for i in range(verts_x):
+            verts2[j][i] = verts1[j][i]
+            if verts1[j][i][2] < 0:
                 if i > 0 and j > 0:
-                    if verts1[i - 1][j - 1][2] >= 0:
-                        verts2[i][j][2] = verts1[i - 1][j - 1][2]
+                    if verts1[j - 1][i - 1][2] >= 0:
+                        verts2[j][i][2] = verts1[j - 1][i - 1][2]
                         continue
                 if i > 0:
-                    if verts1[i - 1][j][2] >= 0:
-                        verts2[i][j][2] = verts1[i - 1][j][2]
+                    if verts1[j][i - 1][2] >= 0:
+                        verts2[j][i][2] = verts1[j][i - 1][2]
                         continue
                 if j > 0:
-                    if verts1[i][j - 1][2] >= 0:
-                        verts2[i][j][2] = verts1[i][j - 1][2]
+                    if verts1[j - 1][i][2] >= 0:
+                        verts2[j][i][2] = verts1[j - 1][i][2]
                         continue
                 if i > 0 and j < verts_y - 1:
-                    if verts1[i - 1][j + 1][2] >= 0:
-                        verts2[i][j][2] = verts1[i - 1][j + 1][2]
+                    if verts1[j + 1][i - 1][2] >= 0:
+                        verts2[j][i][2] = verts1[j + 1][i - 1][2]
                         continue
                 if j < verts_y - 1:
-                    if verts1[i][j + 1][2] >= 0:
-                        verts2[i][j][2] = verts1[i][j + 1][2]
+                    if verts1[j + 1][i][2] >= 0:
+                        verts2[j][i][2] = verts1[j + 1][i][2]
                         continue
                 if i < verts_x -1 and j > 0:
-                    if verts1[i + 1][j - 1][2] >= 0:
-                        verts2[i][j][2] = verts1[i + 1][j - 1][2]
+                    if verts1[j - 1][i + 1][2] >= 0:
+                        verts2[j][i][2] = verts1[j - 1][i + 1][2]
                         continue
                 if i < verts_x -1:
-                    if verts1[i + 1][j][2] >= 0:
-                        verts2[i][j][2] = verts1[i + 1][j][2]
+                    if verts1[j][i + 1][2] >= 0:
+                        verts2[j][i][2] = verts1[j][i + 1][2]
                         continue
                 if i < verts_x -1 and j < verts_y - 1:
-                    if verts1[i + 1][j + 1][2] >= 0:
-                        verts2[i][j][2] = verts1[i + 1][j + 1][2]
+                    if verts1[j + 1][i + 1][2] >= 0:
+                        verts2[j][i][2] = verts1[j + 1][i + 1][2]
                         continue
 
     k_00, k_02, k_11, k_12 = \
         g.graph['cam_param_pix_inv'][0, 0], g.graph['cam_param_pix_inv'][0, 2], \
         g.graph['cam_param_pix_inv'][1, 1], g.graph['cam_param_pix_inv'][1, 2]
 
-    for i in range(verts_x):
-        for j in range(verts_y):
-            n = verts2[i][j]
+    for j in range(verts_y):
+        for i in range(verts_x):
+            n = verts2[j][i]
             n[0] = n[2] * ((n[0] - g.graph['woffset']) * k_00 + k_02)
             n[1] = n[2] * ((n[1] - g.graph['hoffset']) * k_11 + k_12)
             verts.append(n)
-            
-    for i in range(verts_x - 1):
-        for j in range(verts_y - 1):
-            if verts2[i][j][2] >= 0 and verts2[i+1][j][2] >= 0 and verts2[i][j+1][2] >= 0 and verts2[i+1][j+1][2] >= 0:
-                idx.append([i + j * verts_x + 1, (i + 1) + j * verts_x + 1, i + (j + 1) * verts_x + 1])
-                idx.append([(i + 1) + j * verts_x + 1, (i + 1) + (j + 1) * verts_x + 1, i + (j + 1) * verts_x + 1])
+
+    for j in range(verts_y - 1):  
+        for i in range(verts_x - 1):
+            if verts2[j][i][2] >= 0 and verts2[j][i+1][2] >= 0 and verts2[j+1][i][2] >= 0 and verts2[j+1][i+1][2] >= 0:
+                idx.append([i + j * verts_x, (i + 1) + j * verts_x, i + (j + 1) * verts_x])
+                idx.append([(i + 1) + j * verts_x, (i + 1) + (j + 1) * verts_x, i + (j + 1) * verts_x])
     return verts, idx
     
 
@@ -103,7 +103,7 @@ def get_glyphs(g):
         canvas_min_x = canvas_min_y = canvas_size
         canvas_max_x = canvas_max_y = -1
         n = next_q.get()
-        cx, cy, _ = n
+        cy, cx, _ = n
         cc = g.nodes[n]['cc_id']
         q.put(n)
         while not q.empty():
@@ -111,7 +111,7 @@ def get_glyphs(g):
             if n in visited:
                 continue
 
-            nx, ny, nd = n
+            ny, nx, nd = n
             if out_of_bounds(nx, ny, cx, cy):
                 next_q.put(n)
                 continue
@@ -131,20 +131,20 @@ def get_glyphs(g):
                 canvas_max_y = ny
             if ny < canvas_min_y:
                 canvas_min_y = ny
-            canvas[nx][ny] = np.append(g.nodes[n]['color'][::-1], 255)
-            depth_canvas[nx][ny] = abs(nd)            
+            canvas[ny][nx] = np.append(g.nodes[n]['color'][::-1], 255)
+            depth_canvas[ny][nx] = abs(nd)            
             modified = True
 
             for neighbour in g[n]:
                 if neighbour not in visited:    
-                    nx2, ny2, _ = neighbour
+                    ny2, nx2, _ = neighbour
                     if out_of_bounds(nx2, ny2, cx, cy):
                         next_q.put(neighbour)
                     else:
                         q.put(neighbour)
 
             if 'far' in g.nodes[n] and g.nodes[n]['far'] is not None:
-                canvas[nx][ny][3] = 128
+                canvas[ny][nx][3] = 128
                 for neighbour in g.nodes[n]['far']:
                     next_q.put(neighbour)
 
@@ -163,8 +163,8 @@ def get_glyphs(g):
             blocks_x = (canvas_max_x - canvas_min_x) // block_size
             blocks_y = (canvas_max_y - canvas_min_y) // block_size
 
-            img = canvas[canvas_min_x : canvas_max_x, canvas_min_y : canvas_max_y]            
-            depth = depth_canvas[canvas_min_x : canvas_max_x, canvas_min_y : canvas_max_y]
+            img = canvas[canvas_min_y : canvas_max_y, canvas_min_x : canvas_max_x]            
+            depth = depth_canvas[canvas_min_y : canvas_max_y, canvas_min_x : canvas_max_x]
 
             verts, idx = generate_mesh(depth, real_min_x, real_min_y, blocks_x + 1, blocks_y + 1)
 
@@ -175,7 +175,8 @@ def get_glyphs(g):
                     'verts': verts,
                     'idx': idx}
             glyphs.append(glyph)
-            #cv2.imwrite(f"test/{i}.png", img)
+            print(i, blocks_x, blocks_y)
+            cv2.imwrite(f"test/{i}.png", img)
             #depth *= 64 
             #cv2.imwrite(f"test/{i}_d.png", depth)
             i+=1
@@ -187,22 +188,23 @@ def get_glyphs(g):
 
 
 def check_mask(m, i, j, width, height):
-    clash = m[i][j] or m[i+width][j] or m[i][j+height] or m[i+width][j+height]
+    clash = m[j][i] or m[j][i+width] or m[j+height][i] or m[j+height][i+width]
     return not clash
 
 
 def place_glyph(glyph, atlas, mask, mask_size, verts, idx):
     w = glyph['width']
     h = glyph['height']
-    for i in range(mask_size - w):
-        for j in range(mask_size - h):
+    for j in range(mask_size - h):
+        for i in range(mask_size - w):
             if check_mask(mask, i, j, w, h):
-                atlas[i * block_size : (i + w) * block_size, j * block_size : (j + h) * block_size, :] = glyph['tex']
-                mask[i : i + w, j : j + h] = True
+                atlas[j * block_size : (j + h) * block_size, i * block_size : (i + w) * block_size, :] = glyph['tex']
+                mask[j : j + h, i : i + w] = True
                 for id in glyph['idx']:
-                    id[0] += len(verts)
-                    id[1] += len(verts)
-                    id[2] += len(verts)
+                    offset = len(verts) + 1
+                    id[0] += offset
+                    id[1] += offset
+                    id[2] += offset
                     idx.append(id)
                 for vert in glyph['verts']:
                     vert[3] = vert[3] * (w / mask_size) + (i / mask_size)
@@ -224,8 +226,23 @@ def create_atlas(g):
     return atlas, verts, idx
 
 
+def export_obj(g, filename='test'):
+    atlas, verts, idx = create_atlas(g)
+    cv2.imwrite(f"test/{filename}.png", atlas)
+    f = open(f'test/{filename}.obj', 'w')
+
+    f.write('# Verts\n')
+    for v in verts:
+        f.write(f'v {v[0]} {v[1]} {v[2]}\n')
+        f.write(f'vt {v[3]} {v[4]}\n')
+
+    f.write('# Indexes')
+    for i in idx:
+        f.write(f'f {i[0]}/{i[0]} {i[1]}/{i[1]} {i[2]}/{i[2]}\n')
+    f.close()
+
+
 f = open('mesh_small.gz', 'rb')
 g = pickle.load(f)
 f.close()
-atlas, verts, idx = create_atlas(g)
-cv2.imwrite(f"test/atlas.png", atlas)
+export_obj(g)
