@@ -1,12 +1,12 @@
-from turtle import width
+from math import ceil, log2
 import cynetworkx as netx
 import numpy as np
 import pickle 
 import cv2
 from queue import Queue
 
-atlas_size = 4096
-canvas_size = 1024
+atlas_size = 1024
+canvas_size = 256
 block_size = 16
 gap_thickness = 2
 
@@ -73,8 +73,8 @@ def generate_mesh(depth, real_min_x, real_min_y, verts_x, verts_y):
     for j in range(verts_y):
         for i in range(verts_x):
             n = verts2[j][i]
-            n[0] = n[2] * ((n[0] - g.graph['woffset']) * k_00 + k_02)
-            n[1] = n[2] * ((n[1] - g.graph['hoffset']) * k_11 + k_12)
+            n[0] = n[2] * ((n[0] - g.graph['woffset']) * k_00 + k_02) * -1
+            n[1] = n[2] * ((n[1] - g.graph['hoffset']) * k_11 + k_12) * -1
             verts.append(n)
 
     for j in range(verts_y - 1):  
@@ -227,6 +227,11 @@ def create_atlas(g):
 
 
 def export_obj(g, filename='test'):
+    global atlas_size, canvas_size, block_size, gap_thickness
+    atlas_size = 2 ** ceil(log2(max(g.graph['H'], g.graph['W'])))
+    canvas_size = atlas_size // 4
+    block_size = canvas_size // 32
+    gap_thickness = block_size // 8
     atlas, verts, idx = create_atlas(g)
     cv2.imwrite(f"test/{filename}.png", atlas)
     f = open(f'test/{filename}.obj', 'w')
@@ -242,7 +247,7 @@ def export_obj(g, filename='test'):
     f.close()
 
 
-f = open('mesh.gz', 'rb')
+f = open('mesh_small.gz', 'rb')
 g = pickle.load(f)
 f.close()
 export_obj(g)
