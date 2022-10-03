@@ -85,8 +85,8 @@ def generate_mesh(depth, real_min_x, real_min_y, verts_x, verts_y):
     return verts, idx
     
 
-def get_glyphs(g):
-    glyphs = []
+def get_sprites(g):
+    sprites = []
     canvas = np.zeros((canvas_size, canvas_size, 4), dtype=np.uint8)
     depth_canvas = np.zeros((canvas_size, canvas_size), dtype=np.float32)
     depth_canvas -= 1
@@ -168,13 +168,13 @@ def get_glyphs(g):
 
             verts, idx = generate_mesh(depth, real_min_x, real_min_y, blocks_x + 1, blocks_y + 1)
 
-            glyph = {"id": i,
+            sprite = {"id": i,
                     'width': blocks_x,
                     'height': blocks_y,
                     'tex': np.copy(img),
                     'verts': verts,
                     'idx': idx}
-            glyphs.append(glyph)
+            sprites.append(sprite)
             #print(i, blocks_x, blocks_y)
             #cv2.imwrite(f"test/{i}.png", img)
             #depth *= 64 
@@ -183,25 +183,25 @@ def get_glyphs(g):
             canvas[::] = 0
             depth_canvas[::] = -1
 
-    glyphs.sort(key=lambda d: d['height'], reverse=True)
-    return glyphs
+    sprites.sort(key=lambda d: d['height'], reverse=True)
+    return sprites
 
 
-def place_glyph(glyph, atlas, mask, mask_size, verts, idx):
-    w = glyph['width']
-    h = glyph['height']
+def place_sprite(sprite, atlas, mask, mask_size, verts, idx):
+    w = sprite['width']
+    h = sprite['height']
     for j in range(mask_size - h):
         for i in range(mask_size - w):
             if not (True in mask[j : j + h, i : i + w]):
-                atlas[j * block_size : (j + h) * block_size, i * block_size : (i + w) * block_size, :] = glyph['tex']
+                atlas[j * block_size : (j + h) * block_size, i * block_size : (i + w) * block_size, :] = sprite['tex']
                 mask[j : j + h, i : i + w] = True
-                for id in glyph['idx']:
+                for id in sprite['idx']:
                     offset = len(verts) + 1
                     id[0] += offset
                     id[1] += offset
                     id[2] += offset
                     idx.append(id)
-                for vert in glyph['verts']:
+                for vert in sprite['verts']:
                     vert[3] = vert[3] * (w / mask_size) + (i / mask_size)
                     vert[4] = 1.0 - (vert[4] * (h / mask_size) + (j / mask_size))
                     verts.append(vert)
@@ -210,14 +210,14 @@ def place_glyph(glyph, atlas, mask, mask_size, verts, idx):
 
 
 def create_atlas(g):
-    glyphs = get_glyphs(g)
+    sprites = get_sprites(g)
     mask_size = atlas_size // block_size
     atlas = np.zeros((atlas_size, atlas_size, 4), dtype=np.uint8)
     mask = np.zeros((mask_size, mask_size), dtype=np.bool8)
     verts = []
     idx = []
-    for glyph in glyphs:
-        place_glyph(glyph, atlas, mask, mask_size, verts, idx)
+    for sprite in sprites:
+        place_sprite(sprite, atlas, mask, mask_size, verts, idx)
     return atlas, verts, idx
 
 
