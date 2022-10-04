@@ -5,16 +5,16 @@ import pickle
 import cv2
 from queue import Queue
 
-atlas_size = 1024
-canvas_size = 256
+atlas_size = 4096
+canvas_size = 8192
 block_size = 16
-gap_thickness = 2
+gap_thickness = 4
 
 def out_of_bounds(x, y, cx, cy):
     return (abs(x - cx) >= (canvas_size // 2) - gap_thickness) or (abs(y - cy) >= (canvas_size // 2) - gap_thickness)
 
 
-def generate_mesh(depth, real_min_x, real_min_y, verts_x, verts_y):
+def generate_mesh(g, depth, real_min_x, real_min_y, verts_x, verts_y):
     verts = []
     idx = []
     verts1 = np.zeros((verts_y, verts_x, 5), dtype=np.float32)
@@ -104,6 +104,8 @@ def get_sprites(g):
         canvas_max_x = canvas_max_y = -1
         n = next_q.get()
         cy, cx, _ = n
+        cx += block_size - gap_thickness
+        cy += block_size - gap_thickness
         cc = g.nodes[n]['cc_id']
         q.put(n)
         while not q.empty():
@@ -154,19 +156,25 @@ def get_sprites(g):
 
             
         if modified:
+            canvas_min_x -= gap_thickness
+            canvas_min_y -= gap_thickness
+            canvas_max_x += gap_thickness
+            canvas_max_y += gap_thickness
             canvas_min_x -= canvas_min_x % block_size
             canvas_min_y -= canvas_min_y % block_size
-            canvas_max_x += 0 if canvas_max_x % block_size is 0 else block_size - (canvas_max_x % block_size)
-            canvas_max_y += 0 if canvas_max_y % block_size is 0 else block_size - (canvas_max_y % block_size)
+            if canvas_max_x % block_size != 0:
+                canvas_max_x += block_size - (canvas_max_x % block_size)
+            if canvas_max_y % block_size != 0:
+                canvas_max_y += block_size - (canvas_max_y % block_size)
             real_min_x = canvas_min_x + cx - (canvas_size // 2)
             real_min_y = canvas_min_y + cy - (canvas_size // 2)
             blocks_x = (canvas_max_x - canvas_min_x) // block_size
             blocks_y = (canvas_max_y - canvas_min_y) // block_size
 
-            img = canvas[canvas_min_y : canvas_max_y, canvas_min_x : canvas_max_x]            
+            img = canvas[canvas_min_y : canvas_max_y, canvas_min_x : canvas_max_x]           
             depth = depth_canvas[canvas_min_y : canvas_max_y, canvas_min_x : canvas_max_x]
 
-            verts, idx = generate_mesh(depth, real_min_x, real_min_y, blocks_x + 1, blocks_y + 1)
+            verts, idx = generate_mesh(g, depth, real_min_x, real_min_y, blocks_x + 1, blocks_y + 1)
 
             sprite = {"id": i,
                     'width': blocks_x,
@@ -176,7 +184,7 @@ def get_sprites(g):
                     'idx': idx}
             sprites.append(sprite)
             #print(i, blocks_x, blocks_y)
-            #cv2.imwrite(f"test/{i}.png", img)
+            cv2.imwrite(f"test/{i}.png", img)
             #depth *= 64 
             #cv2.imwrite(f"test/{i}_d.png", depth)
             i+=1
@@ -193,7 +201,9 @@ def place_sprite(sprite, atlas, mask, mask_size, verts, idx):
     for j in range(mask_size - h):
         for i in range(mask_size - w):
             if not (True in mask[j : j + h, i : i + w]):
-                atlas[j * block_size : (j + h) * block_size, i * block_size : (i + w) * block_size, :] = sprite['tex']
+                print(sprite['tex'].shape)
+                atlas[j * block_size : (j + h) * block_size, 
+                      i * block_size : (i + w) * block_size, :] = sprite['tex']
                 mask[j : j + h, i : i + w] = True
                 for id in sprite['idx']:
                     offset = len(verts) + 1
@@ -226,8 +236,9 @@ def export_obj(g, filename='test'):
     atlas_size = 2 ** ceil(log2(max(g.graph['H'], g.graph['W'])))
     canvas_size = atlas_size // 4
     block_size = canvas_size // 32
-    gap_thickness = block_size // 8
+    gap_thickness = block_size // 4
     atlas, verts, idx = create_atlas(g)
+    atlas[:, :, 0:3] = cv2.inpaint(atlas[:, :, 0:3], 255 - atlas[:, :, 3:], 3, cv2.INPAINT_TELEA)
     cv2.imwrite(f"test/{filename}.png", atlas)
     f = open(f'test/{filename}.obj', 'w')
 
@@ -242,7 +253,7 @@ def export_obj(g, filename='test'):
     f.close()
 
 
-f = open('mesh_small.gz', 'rb')
+f = open('mesh.gz', 'rb')
 g = pickle.load(f)
 f.close()
 export_obj(g)
